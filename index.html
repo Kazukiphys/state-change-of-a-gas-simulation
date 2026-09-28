@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f5ef">
+  <title>気体の状態変化 | P-V Lab</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f4f5ef;
+      --panel: #ffffff;
+      --ink: #1d302f;
+      --muted: #71807b;
+      --line: #dfe5dc;
+      --green: #176b5b;
+      --green-dark: #104d43;
+      --mint: #e1f2ea;
+      --coral: #e5785b;
+      --amber: #f3bd54;
+      --shadow: 0 14px 32px rgba(28, 54, 45, .07);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Aptos", "Yu Gothic UI", "Meiryo", sans-serif;
+      font-size: 14px;
+    }
+    button { font: inherit; }
+    .app {
+      width: min(1440px, 100%);
+      height: 100dvh;
+      min-height: 610px;
+      margin: 0 auto;
+      padding: 20px 34px 22px;
+      display: grid;
+      grid-template-rows: 62px minmax(260px, 1fr) 208px;
+      gap: 14px;
+    }
+    .top-actions, .section-heading, .readout, .control-heading,
+    .control-footer, .thermal-actions, .mode-tabs, .molecule-options, .chart-legend {
+      display: flex;
+      align-items: center;
+    }
+    .top-actions { gap: 9px; color: var(--muted); font-size: 11px; }
+    .top-signature { margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); color: var(--ink); font-size: 12px; font-style: italic; white-space: nowrap; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #54a97e; box-shadow: 0 0 0 3px #dcefe2; }
+    .heading { display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+    .heading-copy { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+    h1 { margin: 0; font: 500 27px/1.1 Georgia, "Yu Mincho", serif; letter-spacing: 0; }
+    .subtitle { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .run-id { color: var(--muted); font: 11px/1.2 "Cascadia Code", Consolas, monospace; }
+
+    .workspace { display: grid; grid-template-columns: 1.03fr .97fr; gap: 14px; min-height: 0; }
+    .panel {
+      min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--line);
+      border-radius: 8px; background: var(--panel); box-shadow: var(--shadow);
+    }
+    .piston-panel { display: grid; grid-template-rows: 46px minmax(0, 1fr) 58px; padding: 0 20px; }
+    .section-heading { justify-content: space-between; border-bottom: 1px solid #edf0e9; }
+    .eyebrow { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+    .subtle-tag { color: var(--green); background: #edf6ef; border-radius: 3px; padding: 5px 8px; font-size: 10px; }
+    .machine-stage {
+      position: relative; min-height: 0; display: flex; align-items: center; padding: 12px 4px 0;
+    }
+    .machine { width: 100%; height: min(245px, 82%); min-height: 150px; position: relative; }
+    .machine-caption { position: absolute; top: 0; left: 2px; display: flex; gap: 7px; align-items: center; color: #85928b; font-size: 10px; }
+    .chamber {
+      position: absolute; left: 4%; right: 5%; top: 20%; height: 60%; min-height: 96px;
+      border: 3px solid #8c978e; border-right: 0; border-radius: 4px 0 0 4px;
+      background: #fff; overflow: visible;
+    }
+    .chamber::before { content: ""; position: absolute; left: -5px; top: -3px; bottom: -3px; width: 7px; border-radius: 3px; background: #8c978e; }
+    .gas-fill { position: absolute; top: 0; bottom: 0; left: 0; background: #fff; pointer-events: none; }
+    .particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    .particle { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: #993c1d; will-change: left, top; }
+    .piston-assembly { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
+    .piston-rod { position: absolute; z-index: 1; top: 50%; left: 100%; height: 7px; transform: translateY(-50%); background: #8c978e; }
+    .piston-plate {
+      position: absolute; z-index: 2; top: 0; bottom: 0; width: 15px; border: 2px solid #68766c;
+      border-radius: 2px; background: #d9d7ca; pointer-events: auto; cursor: ew-resize; touch-action: none;
+      transition: left 140ms linear;
+    }
+    .piston-plate.locked { cursor: not-allowed; filter: grayscale(.5); opacity: .75; }
+    .volume-arrow { position: absolute; left: 5%; right: 6%; bottom: 0; display: flex; align-items: center; gap: 7px; color: #84928a; font-size: 10px; }
+    .volume-arrow::after { content: "↔"; color: var(--green); font-size: 16px; }
+    .readouts { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid #edf0e9; }
+    .readout { flex-direction: column; align-items: flex-start; justify-content: center; padding-left: 12px; border-right: 1px solid #edf0e9; }
+    .readout:first-child { padding-left: 2px; } .readout:last-child { border: 0; }
+    .readout-label { color: var(--muted); font-size: 10px; }
+    .readout-value { margin-top: 3px; font: 500 19px/1 Georgia, "Yu Mincho", serif; }
+    .readout-value small { font: 11px/1 "Aptos", "Yu Gothic UI", sans-serif; color: var(--muted); }
+
+    .chart-panel { display: grid; grid-template-rows: 46px minmax(0, 1fr) 60px; padding: 0 18px 8px; }
+    .chart-heading { padding: 0 2px; }
+    .chart-legend { gap: 7px; color: var(--muted); font-size: 10px; }
+    .legend-line { width: 17px; border-top: 2px solid var(--green); }
+    .graph-wrap { min-height: 0; position: relative; padding: 5px 0 0; }
+    #pv-chart { display: block; width: 100%; height: 100%; overflow: visible; }
+    .chart-grid { stroke: #e9eee7; stroke-width: 1; }
+    .chart-axis { stroke: #8b9a90; stroke-width: 1.2; }
+    .chart-tick { fill: #839087; font: 10px "Aptos", "Yu Gothic UI", sans-serif; }
+    .chart-label { fill: #52665d; font: 11px "Aptos", "Yu Gothic UI", sans-serif; }
+    .chart-range-boundary { stroke: #1d302f; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .chart-path { fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .chart-point { fill: var(--coral); stroke: white; stroke-width: 3; }
+    .chart-start { fill: #fff; stroke: var(--green); stroke-width: 2; cursor: grab; touch-action: none; }
+    .chart-start:active { cursor: grabbing; }
+    .chart-range-marker { fill: #d28a25; stroke: white; stroke-width: 1; }
+    .chart-footer { display: grid; grid-template-rows: 1fr 1fr; align-content: center; gap: 3px; color: var(--muted); font-size: 10px; border-top: 1px solid #edf0e9; }
+    .chart-footer-top, .chart-initial-legend, .chart-mode-legend, .chart-mode-key, .overlay-control { display: flex; align-items: center; }
+    .chart-footer-top { justify-content: space-between; gap: 8px; }
+    .chart-initial-legend { gap: 6px; white-space: nowrap; }
+    .chart-initial-key { width: 9px; height: 9px; flex: none; border: 2px solid var(--green); border-radius: 50%; background: #fff; }
+    .chart-mode-legend { justify-content: space-between; gap: 5px; }
+    .chart-mode-key { gap: 4px; color: var(--muted); font-size: 9px; white-space: nowrap; }
+    .chart-mode-key.active { color: var(--ink); font-weight: 700; }
+    .chart-mode-swatch { width: 9px; height: 2px; background: var(--trace-color); }
+    .overlay-control { gap: 4px; color: var(--ink); font-size: 10px; white-space: nowrap; cursor: pointer; }
+    .overlay-control input { width: 12px; height: 12px; margin: 0; accent-color: var(--green); }
+    .chart-footer strong { color: var(--ink); font-weight: 600; }
+
+    .controls { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); padding: 14px 18px 12px; display: grid; grid-template-rows: 25px minmax(0, 1fr) 30px; min-height: 0; }
+    .control-heading { justify-content: space-between; }
+    .control-heading h2 { margin: 0; font-size: 13px; font-weight: 700; }
+    .gamma { color: var(--muted); font: 11px "Cascadia Code", Consolas, monospace; }
+    .control-grid { display: grid; grid-template-columns: .85fr 1.4fr .8fr; align-items: center; gap: 22px; min-height: 0; }
+    .control-group { min-width: 0; }
+    .group-label { display: block; margin-bottom: 9px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+    .molecule-options, .mode-tabs { gap: 5px; }
+    .choice {
+      min-width: 0; border: 1px solid #dce4dc; background: #fff; color: #607168; border-radius: 4px;
+      padding: 8px 9px; cursor: pointer; transition: background .16s, border-color .16s, color .16s;
+    }
+    .choice:hover { border-color: #9cb9a8; }
+    .choice[aria-pressed="true"] { color: var(--green-dark); border-color: #7eaa94; background: var(--mint); }
+    .molecule-options .choice { flex: 1; font-size: 11px; white-space: nowrap; }
+    .mode-tabs { display: grid; grid-template-columns: repeat(4, 1fr); }
+    .mode-tabs .choice { padding: 8px 5px; font-size: 11px; white-space: nowrap; }
+    .thermal-actions { gap: 8px; }
+    .thermal-button {
+      flex: 1; height: 39px; display: flex; align-items: center; justify-content: center; gap: 7px;
+      border: 0; border-radius: 4px; cursor: pointer; font-weight: 700; transition: transform .12s, filter .12s;
+    }
+    .thermal-button:hover { filter: brightness(.97); transform: translateY(-1px); }
+    .thermal-button:active { transform: translateY(1px); }
+    .thermal-button:disabled, .thermal-button:disabled:hover { cursor: not-allowed; filter: grayscale(.45); opacity: .5; transform: none; }
+    .thermal-button.stop { flex: .8; border: 1px solid var(--line); background: #f1f3ee; color: var(--ink); }
+    .thermal-button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px rgba(29, 48, 47, .2); }
+    .thermal-button.heat { background: var(--coral); color: white; }
+    .thermal-button.cool { background: #e8f0eb; color: var(--green-dark); }
+    .thermal-icon { font-size: 17px; line-height: 1; }
+    .control-footer { justify-content: space-between; gap: 14px; border-top: 1px solid #edf0e9; color: var(--muted); font-size: 10px; }
+    #process-note { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .reset-button { display: inline-flex; align-items: center; gap: 6px; flex: none; border: 0; background: transparent; color: var(--green-dark); padding: 5px 2px; cursor: pointer; font-size: 11px; font-weight: 700; }
+    .reset-button:hover { color: var(--coral); }
+    button:focus-visible, [role="slider"]:focus-visible { outline: 3px solid #f1bd55; outline-offset: 2px; }
+
+    @media (max-width: 900px) {
+      .app { padding: 14px 18px 16px; grid-template-rows: 52px minmax(250px, 1fr) 198px; gap: 10px; }
+      .control-grid { gap: 12px; grid-template-columns: .8fr 1.35fr .85fr; }
+      .controls { padding: 11px 13px 9px; }
+      .choice { padding: 7px 6px; }
+    }
+    @media (max-width: 650px) {
+      .app { min-height: 600px; padding: 10px 11px; grid-template-rows: 42px minmax(230px, 1fr) 221px; gap: 8px; }
+      .top-actions { font-size: 10px; }
+      .heading-copy { gap: 7px; } h1 { font-size: 22px; } .subtitle { display: none; }
+      .workspace { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .piston-panel { padding: 0 10px; grid-template-rows: 38px minmax(0, 1fr) 52px; }
+      .chart-panel { padding: 0 9px 6px; grid-template-rows: 38px minmax(0, 1fr) 58px; }
+      .machine { height: 90%; min-height: 165px; }
+      .chamber { top: 14%; height: 70%; }
+      .machine-caption { font-size: 9px; }
+      .subtle-tag { padding: 4px 5px; font-size: 9px; }
+      .readout { padding-left: 7px; } .readout-value { font-size: 16px; } .readout-value small { font-size: 9px; }
+      .eyebrow { font-size: 9px; }
+      .chart-legend { font-size: 9px; gap: 4px; } .legend-line { width: 12px; }
+      .chart-footer { font-size: 9px; }
+      .controls { padding: 9px 10px 7px; grid-template-rows: 22px minmax(0, 1fr) 28px; }
+      .control-heading h2 { font-size: 12px; } .gamma { font-size: 10px; }
+      .control-grid { grid-template-columns: 1fr 1.35fr; grid-template-rows: 1fr 1fr; gap: 4px 9px; padding: 5px 0; }
+      .control-grid > .control-group:last-child { grid-column: 1 / -1; }
+      .group-label { margin-bottom: 5px; font-size: 9px; }
+      .molecule-options, .mode-tabs { gap: 3px; }
+      .molecule-options .choice, .mode-tabs .choice { padding: 6px 3px; font-size: 10px; }
+      .thermal-button { height: 34px; font-size: 12px; }
+      .control-footer { font-size: 9px; gap: 5px; }
+      .reset-button { font-size: 10px; }
+    }
+    @media (max-height: 700px) and (min-width: 651px) {
+      .app { min-height: 0; padding-top: 12px; padding-bottom: 12px; grid-template-rows: 48px minmax(220px, 1fr) 184px; gap: 9px; }
+      .controls { padding-top: 10px; padding-bottom: 8px; }
+      .machine { height: min(210px, 78%); }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="heading" aria-label="シミュレーションタイトル">
+      <div class="heading-copy"><h1>気体の状態変化</h1><span class="subtitle">熱と仕事で変わる、気体のふるまい</span></div>
+      <div class="top-actions"><span class="live-dot" aria-hidden="true"></span><span>LIVE SIMULATION</span><span class="top-signature">by K.Kitaoka</span></div>
+    </section>
+
+    <section class="workspace" aria-label="気体の状態と圧力・体積グラフ">
+      <article class="panel piston-panel">
+        <div class="section-heading"><span class="eyebrow">01 &nbsp; PISTON</span><span class="subtle-tag" id="piston-status">ドラッグして体積を変更</span></div>
+        <div class="machine-stage">
+          <div class="machine" id="machine">
+            <div class="machine-caption"><span class="live-dot" aria-hidden="true"></span><span id="molecule-caption">単原子分子モデル</span></div>
+            <div class="chamber" id="chamber">
+              <div class="gas-fill" id="gas-fill"></div>
+              <div class="particles" id="particles" aria-hidden="true">
+                <span class="particle" data-x="0.15" style="top: 22%"></span>
+                <span class="particle" data-x="0.76" style="top: 20%"></span>
+                <span class="particle" data-x="0.48" style="top: 48%"></span>
+                <span class="particle" data-x="0.25" style="top: 74%"></span>
+                <span class="particle" data-x="0.82" style="top: 72%"></span>
+              </div>
+              <div class="piston-assembly">
+                <div class="piston-plate" id="piston" role="slider" tabindex="0" aria-label="ピストン位置、気体の体積" aria-orientation="horizontal" aria-valuemin="1.6" aria-valuemax="9.2" aria-valuenow="5">
+                  <span class="piston-rod" id="piston-rod"></span>
+                </div>
+              </div>
+            </div>
+            <div class="volume-arrow"><span>気体の体積</span></div>
+          </div>
+        </div>
+        <div class="readouts" aria-live="polite">
+          <div class="readout"><span class="readout-label">圧力 P</span><span class="readout-value"><span id="pressure-value">120,000</span> <small>Pa</small></span></div>
+          <div class="readout"><span class="readout-label">体積 V</span><span class="readout-value"><span id="volume-value">5.00</span> <small>L</small></span></div>
+          <div class="readout"><span class="readout-label">温度 T</span><span class="readout-value"><span id="temperature-value">300</span> <small>K</small></span></div>
+        </div>
+      </article>
+
+      <article class="panel chart-panel">
+        <div class="section-heading chart-heading"><span class="eyebrow">02 &nbsp; P–V DIAGRAM</span><span class="chart-legend"><span class="legend-line"></span>状態変化の軌跡</span></div>
+        <div class="graph-wrap">
+          <svg id="pv-chart" viewBox="0 0 560 330" role="img" aria-label="圧力と体積の関係を示すグラフ">
+            <defs><clipPath id="plot-clip"><rect x="84" y="18" width="451" height="260"></rect></clipPath></defs>
+            <g id="grid-layer"></g>
+            <g id="range-layer"></g>
+            <g id="axis-layer"></g>
+            <g id="trace-layer" clip-path="url(#plot-clip)"></g>
+            <path class="chart-path" id="chart-path" clip-path="url(#plot-clip)" d=""></path>
+            <circle class="chart-point" id="chart-point" clip-path="url(#plot-clip)" r="6"></circle>
+            <circle class="chart-start" id="chart-start" role="slider" tabindex="0" aria-label="初期状態。ドラッグして圧力と体積を変更" aria-orientation="horizontal" aria-valuemin="2" aria-valuemax="8" aria-valuenow="5" r="7"></circle>
+            <path class="chart-range-marker" id="chart-range-marker" d=""></path>
+          </svg>
+        </div>
+        <div class="chart-footer">
+          <div class="chart-footer-top">
+            <span class="chart-initial-legend"><span class="chart-initial-key" aria-hidden="true"></span>初期状態</span>
+            <label class="overlay-control"><input id="keep-traces" type="checkbox">重ねて表示</label>
+          </div>
+          <div class="chart-mode-legend" aria-label="変化過程の色">
+            <span class="chart-mode-key" data-mode="isochoric"><span class="chart-mode-swatch" style="--trace-color: #0072b2"></span>定積</span>
+            <span class="chart-mode-key" data-mode="isobaric"><span class="chart-mode-swatch" style="--trace-color: #009e73"></span>定圧</span>
+            <span class="chart-mode-key active" data-mode="isothermal"><span class="chart-mode-swatch" style="--trace-color: #d55e00"></span>等温</span>
+            <span class="chart-mode-key" data-mode="adiabatic"><span class="chart-mode-swatch" style="--trace-color: #8e63b0"></span>断熱</span>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="controls" aria-label="シミュレーション操作">
+      <div class="control-heading"><h2>条件と操作</h2><span class="gamma" id="gamma-label">比熱比 γ = 1.67</span></div>
+      <div class="control-grid">
+        <div class="control-group">
+          <span class="group-label">分子モデル</span>
+          <div class="molecule-options" role="group" aria-label="分子モデル">
+            <button class="choice molecule-choice" data-molecule="mono" aria-pressed="true">単原子</button>
+            <button class="choice molecule-choice" data-molecule="di" aria-pressed="false">二原子</button>
+            <button class="choice molecule-choice" data-molecule="tri" aria-pressed="false">三原子</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="group-label">変化の種類</span>
+          <div class="mode-tabs" role="group" aria-label="変化の種類">
+            <button class="choice mode-choice" data-mode="isochoric" aria-pressed="false">定積</button>
+            <button class="choice mode-choice" data-mode="isobaric" aria-pressed="false">定圧</button>
+            <button class="choice mode-choice" data-mode="isothermal" aria-pressed="true">等温</button>
+            <button class="choice mode-choice" data-mode="adiabatic" aria-pressed="false">断熱</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="group-label">エネルギー操作</span>
+          <div class="thermal-actions">
+            <button class="thermal-button heat" id="heat-button" aria-pressed="false"><span class="thermal-icon" aria-hidden="true">↑</span>加熱</button>
+            <button class="thermal-button cool" id="cool-button" aria-pressed="false"><span class="thermal-icon" aria-hidden="true">↓</span>冷却</button>
+            <button class="thermal-button stop" id="stop-button" aria-pressed="false"><span class="thermal-icon" aria-hidden="true">■</span>停止</button>
+          </div>
+        </div>
+      </div>
+      <div class="control-footer"><span id="process-note">等温変化: 温度を保ち、加熱・冷却で膨張／圧縮します。</span><button class="reset-button" id="reset-button"><span aria-hidden="true">↺</span>リセット</button></div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const limits = { minVolume: 2, maxVolume: 8, minTemp: 48, maxTemp: 1000 };
+      const modes = {
+        isochoric: { label: "定積変化", note: "定積変化: 体積を保ち、加熱・冷却で圧力が変化します。" },
+        isobaric: { label: "定圧変化", note: "定圧変化: 圧力を保ち、加熱で膨張、冷却で収縮します。" },
+        isothermal: { label: "等温変化", note: "等温変化: 温度を保ち、加熱・冷却で膨張／圧縮します。" },
+        adiabatic: { label: "断熱変化", note: "断熱変化: 熱の出入りなし。圧縮で温度上昇、膨張で低下します。" }
+      };
+      const molecules = {
+        mono: { label: "単原子分子モデル", gamma: 5 / 3 },
+        di: { label: "二原子分子モデル", gamma: 7 / 5 },
+        tri: { label: "三原子分子モデル", gamma: 4 / 3 }
+      };
+      const modeColors = { isochoric: "#0072b2", isobaric: "#009e73", isothermal: "#d55e00", adiabatic: "#8e63b0" };
+      const chartPlot = { left: 84, right: 535, top: 18, bottom: 278 };
+      const chartScale = { maxVolume: 10, minInitialPressurePa: 48000, maxPressurePa: 240000 };
+      const state = { p: 1.2, v: 5, t: 300, mode: "isothermal", molecule: "mono", history: [], traces: [], start: null };
+      const $ = (id) => document.getElementById(id);
+      const chamber = $("chamber");
+      const piston = $("piston");
+      const particleLayer = $("particles");
+      const particleSystem = [];
+      const ns = "http://www.w3.org/2000/svg";
+      let drag = null;
+      let simulationSize = null;
+      let previousPistonX = null;
+      let lastFrameTime = 0;
+      let thermalTimer = null;
+      let pistonRodWidth = null;
+      let initialStateDrag = null;
+
+      function scaleParticleSpeeds(previousTemperature, nextTemperature) {
+        if (particleSystem.length && previousTemperature > 0 && nextTemperature > 0) {
+          const speedScale = Math.sqrt(nextTemperature / previousTemperature);
+          particleSystem.forEach((particle) => {
+            particle.vx *= speedScale;
+            particle.vy *= speedScale;
+          });
+        }
+      }
+
+      function setState(p, v, t) {
+        if (p === state.p && v === state.v && t === state.t) return;
+        scaleParticleSpeeds(state.t, t);
+        state.p = p; state.v = v; state.t = t;
+        state.history.push({ p, v });
+        render();
+      }
+
+      function setInitialState(volume, pressure, base) {
+        const nextVolume = clamp(volume, limits.minVolume, limits.maxVolume);
+        const gasConstant = base.p * base.v / base.t;
+        const minPressure = Math.max(chartScale.minInitialPressurePa / 100000, gasConstant * limits.minTemp / nextVolume);
+        const maxPressure = Math.min(gasConstant * limits.maxTemp / nextVolume, chartScale.maxPressurePa / 100000);
+        const nextPressure = clamp(pressure, minPressure, maxPressure);
+        const nextTemperature = nextPressure * nextVolume / gasConstant;
+        if (nextPressure === state.p && nextVolume === state.v && nextTemperature === state.t) return;
+        scaleParticleSpeeds(state.t, nextTemperature);
+        state.p = nextPressure; state.v = nextVolume; state.t = nextTemperature;
+        state.start = { p: nextPressure, v: nextVolume, t: nextTemperature };
+        state.history = [{ p: nextPressure, v: nextVolume }];
+        state.traces = [];
+        render();
+      }
+
+      function applyThermal(direction, step = 1) {
+        const old = { p: state.p, v: state.v, t: state.t };
+        const gamma = molecules[state.molecule].gamma;
+        let p = old.p, v = old.v, t = old.t;
+        let targetVolume = old.v;
+        if (state.mode === "isochoric") {
+          t = clamp(old.t + direction * 18 * step, limits.minTemp, limits.maxTemp);
+          p = old.p * t / old.t;
+        } else if (state.mode === "isobaric") {
+          t = clamp(old.t + direction * 18 * step, limits.minTemp, limits.maxTemp);
+          targetVolume = old.v * t / old.t;
+          v = clamp(targetVolume, limits.minVolume, limits.maxVolume);
+          t = old.t * v / old.v;
+        } else if (state.mode === "isothermal") {
+          targetVolume = old.v + direction * 0.32 * step;
+          v = clamp(targetVolume, limits.minVolume, limits.maxVolume);
+          p = old.p * old.v / v;
+        } else {
+          t = clamp(old.t + direction * 18 * step, limits.minTemp, limits.maxTemp);
+          targetVolume = old.v * Math.pow(old.t / t, 1 / (gamma - 1));
+          v = clamp(targetVolume, limits.minVolume, limits.maxVolume);
+          t = old.t * Math.pow(old.v / v, gamma - 1);
+          p = old.p * (t / old.t) * (old.v / v);
+        }
+        const unchanged = p === old.p && v === old.v && t === old.t;
+        setState(p, v, t);
+        if (unchanged) return true;
+        return (targetVolume <= limits.minVolume && targetVolume < old.v)
+          || (targetVolume >= limits.maxVolume && targetVolume > old.v);
+      }
+
+      function setVolume(nextVolume) {
+        const old = { p: state.p, v: state.v, t: state.t };
+        const v = clamp(nextVolume, limits.minVolume, limits.maxVolume);
+        if (Math.abs(v - old.v) < 0.002) return;
+        let p = old.p, t = old.t;
+        if (state.mode === "isobaric") {
+          t = old.t * v / old.v;
+        } else if (state.mode === "isothermal") {
+          p = old.p * old.v / v;
+        } else if (state.mode === "adiabatic") {
+          const gamma = molecules[state.molecule].gamma;
+          t = old.t * Math.pow(old.v / v, gamma - 1);
+          p = old.p * Math.pow(old.v / v, gamma);
+        }
+        setState(p, v, t);
+      }
+
+      function render() {
+        $("pressure-value").textContent = Math.round(state.p * 100000).toLocaleString("ja-JP");
+        $("volume-value").textContent = state.v.toFixed(2);
+        $("temperature-value").textContent = Math.round(state.t);
+        $("piston").setAttribute("aria-valuenow", state.v.toFixed(2));
+        $("gamma-label").textContent = `比熱比 γ = ${molecules[state.molecule].gamma.toFixed(2)}`;
+        $("molecule-caption").textContent = molecules[state.molecule].label;
+        $("process-note").textContent = modes[state.mode].note;
+        $("piston-status").textContent = state.mode === "isochoric" ? "定積 · ピストン固定" : "ドラッグして体積を変更";
+        piston.classList.toggle("locked", state.mode === "isochoric");
+        const adiabatic = state.mode === "adiabatic";
+        $("heat-button").disabled = adiabatic;
+        $("cool-button").disabled = adiabatic;
+        const fraction = (state.v - limits.minVolume) / (limits.maxVolume - limits.minVolume);
+        const travel = getPistonTravel();
+        const position = travel.min + fraction * (travel.max - travel.min);
+        piston.style.left = `${position}px`;
+        if (pistonRodWidth === null) {
+          pistonRodWidth = Math.max(0, chamber.clientWidth * 1.06 - position - piston.offsetWidth);
+          $("piston-rod").style.width = `${pistonRodWidth}px`;
+        }
+        $("gas-fill").style.width = `${position}px`;
+        updateParticles();
+        renderChart();
+      }
+
+      function getPistonTravel() {
+        const extent = Math.max(0, chamber.clientWidth - piston.offsetWidth);
+        return { min: extent * 0.2, max: extent * 0.8 };
+      }
+
+      function updateParticles() {
+        if (particleSystem.length) return;
+        const width = particleLayer.clientWidth;
+        const height = particleLayer.clientHeight;
+        const pistonX = piston.offsetLeft;
+        const angles = [0.55, 2.1, 3.35, 4.7, 5.65];
+        particleLayer.querySelectorAll(".particle").forEach((element, index) => {
+          const radius = element.offsetWidth / 2;
+          const minX = radius + 4;
+          const maxX = Math.max(minX, pistonX - radius - 4);
+          const yFraction = parseFloat(element.style.top) / 100;
+          const angle = angles[index];
+          const speed = 75 + index * 13;
+          particleSystem.push({
+            element,
+            radius,
+            x: minX + Number(element.dataset.x) * (maxX - minX),
+            y: radius + yFraction * (height - radius * 2),
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed
+          });
+        });
+        simulationSize = { width, height };
+        previousPistonX = pistonX;
+      }
+
+      function animateParticles(timestamp) {
+        const elapsed = lastFrameTime ? Math.min((timestamp - lastFrameTime) / 1000, 0.035) : 0;
+        lastFrameTime = timestamp;
+        const width = particleLayer.clientWidth;
+        const height = particleLayer.clientHeight;
+        if (particleSystem.length && width > 0 && height > 0) {
+          if (simulationSize && (width !== simulationSize.width || height !== simulationSize.height)) {
+            const scaleX = width / simulationSize.width;
+            const scaleY = height / simulationSize.height;
+            particleSystem.forEach((particle) => {
+              particle.x *= scaleX; particle.vx *= scaleX;
+              particle.y *= scaleY; particle.vy *= scaleY;
+            });
+            simulationSize = { width, height };
+          }
+          const pistonX = piston.offsetLeft;
+          const pistonVelocity = elapsed && previousPistonX !== null ? clamp((pistonX - previousPistonX) / elapsed, -180, 180) : 0;
+          previousPistonX = pistonX;
+          particleSystem.forEach((particle) => {
+            particle.x += particle.vx * elapsed;
+            particle.y += particle.vy * elapsed;
+            const leftWall = particle.radius + 2;
+            const rightWall = pistonX - particle.radius;
+            if (particle.x < leftWall) { particle.x = leftWall; particle.vx = Math.abs(particle.vx); }
+            if (particle.x > rightWall) { particle.x = rightWall; particle.vx = 2 * pistonVelocity - particle.vx; }
+            if (particle.y < particle.radius) { particle.y = particle.radius; particle.vy = Math.abs(particle.vy); }
+            if (particle.y > height - particle.radius) { particle.y = height - particle.radius; particle.vy = -Math.abs(particle.vy); }
+            particle.element.style.left = `${particle.x - particle.radius}px`;
+            particle.element.style.top = `${particle.y - particle.radius}px`;
+          });
+        }
+        requestAnimationFrame(animateParticles);
+      }
+
+      function stopThermal() {
+        if (thermalTimer !== null) window.clearInterval(thermalTimer);
+        thermalTimer = null;
+        $("heat-button").setAttribute("aria-pressed", "false");
+        $("cool-button").setAttribute("aria-pressed", "false");
+        $("stop-button").setAttribute("aria-pressed", "false");
+      }
+
+      function startThermal(direction) {
+        if (state.mode === "adiabatic") return;
+        stopThermal();
+        $(direction > 0 ? "heat-button" : "cool-button").setAttribute("aria-pressed", "true");
+        if (applyThermal(direction, 0.25)) {
+          stopThermal();
+          return;
+        }
+        thermalTimer = window.setInterval(() => {
+          if (applyThermal(direction, 0.25)) stopThermal();
+        }, 60);
+      }
+
+      function renderChart() {
+        const plot = chartPlot;
+        const maxV = chartScale.maxVolume;
+        const maxP = chartScale.maxPressurePa;
+        const minRangeV = maxV * 0.2;
+        const maxRangeV = maxV * 0.8;
+        const x = (v) => plot.left + (v / maxV) * (plot.right - plot.left);
+        const y = (p) => plot.bottom - ((p * 100000) / maxP) * (plot.bottom - plot.top);
+        const plotX = (v) => clamp(x(v), plot.left, plot.right);
+        const plotY = (p) => clamp(y(p), plot.top, plot.bottom);
+        const grid = $("grid-layer"), axes = $("axis-layer");
+        const rangeLayer = $("range-layer");
+        grid.replaceChildren(); rangeLayer.replaceChildren(); axes.replaceChildren();
+        for (let i = 0; i <= 5; i++) {
+          const gx = plot.left + i * (plot.right - plot.left) / 5;
+          const gy = plot.top + i * (plot.bottom - plot.top) / 5;
+          grid.append(svg("line", { x1: gx, y1: plot.top, x2: gx, y2: plot.bottom, class: "chart-grid" }));
+          grid.append(svg("line", { x1: plot.left, y1: gy, x2: plot.right, y2: gy, class: "chart-grid" }));
+          const volumeTick = svg("text", { x: gx, y: plot.bottom + 19, "text-anchor": "middle", class: "chart-tick" });
+          volumeTick.textContent = (maxV * i / 5).toFixed(0);
+          axes.append(volumeTick);
+          const pressureTick = svg("text", { x: plot.left - 10, y: gy + 3, "text-anchor": "end", class: "chart-tick" });
+          pressureTick.textContent = Math.round(maxP * (5 - i) / 5).toLocaleString("ja-JP");
+          axes.append(pressureTick);
+        }
+        [minRangeV, maxRangeV].forEach((volume) => {
+          const boundaryX = x(volume);
+          rangeLayer.append(svg("line", { x1: boundaryX, y1: plot.top, x2: boundaryX, y2: plot.bottom, class: "chart-range-boundary" }));
+        });
+        axes.append(svg("line", { x1: plot.left, y1: plot.top, x2: plot.left, y2: plot.bottom, class: "chart-axis" }));
+        axes.append(svg("line", { x1: plot.left, y1: plot.bottom, x2: plot.right, y2: plot.bottom, class: "chart-axis" }));
+        const xLabel = svg("text", { x: (plot.left + plot.right) / 2, y: 321, "text-anchor": "middle", class: "chart-label" });
+        xLabel.textContent = "体積 V  [L]"; axes.append(xLabel);
+        const yLabel = svg("text", { x: 20, y: (plot.top + plot.bottom) / 2, "text-anchor": "middle", transform: `rotate(-90 20 ${(plot.top + plot.bottom) / 2})`, class: "chart-label" });
+        yLabel.textContent = "圧力 P  [Pa]"; axes.append(yLabel);
+        const pathFor = (points) => points.map((point, index) => `${index ? "L" : "M"}${x(point.v).toFixed(1)},${y(point.p).toFixed(1)}`).join(" ");
+        const traceLayer = $("trace-layer");
+        traceLayer.replaceChildren();
+        state.traces.forEach((trace) => {
+          const path = svg("path", { class: "chart-path", d: pathFor(trace.points) });
+          path.style.stroke = modeColors[trace.mode];
+          traceLayer.append(path);
+        });
+        $("chart-path").setAttribute("d", pathFor(state.history));
+        $("chart-path").style.stroke = modeColors[state.mode];
+        $("chart-point").style.fill = modeColors[state.mode];
+        document.querySelectorAll(".chart-mode-key").forEach((key) => {
+          key.classList.toggle("active", key.dataset.mode === state.mode);
+        });
+        const initial = state.start, current = state.history[state.history.length - 1];
+        $("chart-start").setAttribute("cx", x(initial.v)); $("chart-start").setAttribute("cy", y(initial.p));
+        $("chart-start").setAttribute("aria-valuenow", initial.v.toFixed(2));
+        $("chart-start").setAttribute("aria-valuetext", `体積 ${initial.v.toFixed(2)} L、圧力 ${Math.round(initial.p * 100000).toLocaleString("ja-JP")} Pa`);
+        $("chart-point").setAttribute("cx", plotX(current.v)); $("chart-point").setAttribute("cy", plotY(current.p));
+        const markers = [];
+        if (current.v < minRangeV) {
+          const edgeX = x(minRangeV), edgeY = clamp(plotY(current.p), plot.top + 6, plot.bottom - 6);
+          markers.push(`M${edgeX - 2},${edgeY}L${edgeX + 8},${edgeY - 6}L${edgeX + 8},${edgeY + 6}Z`);
+        } else if (current.v > maxRangeV) {
+          const edgeX = x(maxRangeV), edgeY = clamp(plotY(current.p), plot.top + 6, plot.bottom - 6);
+          markers.push(`M${edgeX + 2},${edgeY}L${edgeX - 8},${edgeY - 6}L${edgeX - 8},${edgeY + 6}Z`);
+        }
+        const currentPressure = current.p * 100000;
+        if (currentPressure > maxP) {
+          const edgeX = plotX(current.v);
+          markers.push(`M${edgeX},${plot.top + 1}L${edgeX - 6},${plot.top + 11}L${edgeX + 6},${plot.top + 11}Z`);
+        } else if (currentPressure < 0) {
+          const edgeX = plotX(current.v);
+          markers.push(`M${edgeX},${plot.bottom - 1}L${edgeX - 6},${plot.bottom - 11}L${edgeX + 6},${plot.bottom - 11}Z`);
+        }
+        $("chart-range-marker").setAttribute("d", markers.join(" "));
+        const outOfRange = [];
+        if (current.v < minRangeV || current.v > maxRangeV) outOfRange.push("体積が20〜80%の範囲外");
+        if (currentPressure < 0 || currentPressure > maxP) outOfRange.push("圧力がグラフ範囲外");
+        $("pv-chart").setAttribute("aria-label", `圧力と体積の関係を示すグラフ${outOfRange.length ? `。${outOfRange.join("、")}` : ""}`);
+      }
+
+      function svg(tag, attributes) {
+        const element = document.createElementNS(ns, tag);
+        Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+        return element;
+      }
+      function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+      function chartPointFromPointer(event) {
+        const point = $("pv-chart").createSVGPoint();
+        point.x = event.clientX;
+        point.y = event.clientY;
+        return point.matrixTransform($("pv-chart").getScreenCTM().inverse());
+      }
+
+      function setInitialStateFromChartPoint(point, base) {
+        const volumeFraction = clamp((point.x - chartPlot.left) / (chartPlot.right - chartPlot.left), 0.2, 0.8);
+        const pressureFraction = clamp((chartPlot.bottom - point.y) / (chartPlot.bottom - chartPlot.top), chartScale.minInitialPressurePa / chartScale.maxPressurePa, 1);
+        const volume = volumeFraction * chartScale.maxVolume;
+        const pressure = pressureFraction * chartScale.maxPressurePa / 100000;
+        setInitialState(volume, pressure, base);
+      }
+
+      $("chart-start").addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        stopThermal();
+        initialStateDrag = { pointerId: event.pointerId, base: { ...state.start } };
+        $("chart-start").setPointerCapture(event.pointerId);
+      });
+      $("chart-start").addEventListener("pointermove", (event) => {
+        if (!initialStateDrag || initialStateDrag.pointerId !== event.pointerId) return;
+        setInitialStateFromChartPoint(chartPointFromPointer(event), initialStateDrag.base);
+      });
+      $("chart-start").addEventListener("pointerup", () => { initialStateDrag = null; });
+      $("chart-start").addEventListener("pointercancel", () => { initialStateDrag = null; });
+      $("chart-start").addEventListener("keydown", (event) => {
+        const volumeDelta = event.key === "ArrowRight" ? 0.1 : event.key === "ArrowLeft" ? -0.1 : 0;
+        const pressureDelta = event.key === "ArrowUp" ? 0.02 : event.key === "ArrowDown" ? -0.02 : 0;
+        if (!volumeDelta && !pressureDelta) return;
+        event.preventDefault();
+        stopThermal();
+        setInitialState(state.start.v + volumeDelta, state.start.p + pressureDelta, state.start);
+      });
+
+      function beginDrag(event) {
+        if (state.mode === "isochoric") return;
+        event.preventDefault();
+        stopThermal();
+        const travel = getPistonTravel();
+        drag = { pointerId: event.pointerId, lastX: event.clientX, travelDistance: travel.max - travel.min };
+        piston.setPointerCapture(event.pointerId);
+      }
+      piston.addEventListener("pointerdown", beginDrag);
+      piston.addEventListener("pointermove", (event) => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const delta = (event.clientX - drag.lastX) / drag.travelDistance * (limits.maxVolume - limits.minVolume);
+        drag.lastX = event.clientX;
+        setVolume(state.v + delta);
+      });
+      piston.addEventListener("pointerup", () => { drag = null; });
+      piston.addEventListener("pointercancel", () => { drag = null; });
+      piston.addEventListener("keydown", (event) => {
+        if (state.mode === "isochoric") return;
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          stopThermal();
+          setVolume(state.v + (event.key === "ArrowRight" ? 0.15 : -0.15));
+        }
+      });
+      $("heat-button").addEventListener("click", () => startThermal(1));
+      $("cool-button").addEventListener("click", () => startThermal(-1));
+      $("stop-button").addEventListener("click", stopThermal);
+      document.querySelectorAll(".mode-choice").forEach((button) => button.addEventListener("click", () => {
+        if (state.mode === button.dataset.mode) return;
+        if (button.dataset.mode === "adiabatic") stopThermal();
+        if ($("keep-traces").checked && state.history.length > 1) {
+          state.traces.push({ mode: state.mode, points: state.history.slice() });
+        } else {
+          state.traces = [];
+        }
+        state.mode = button.dataset.mode;
+        document.querySelectorAll(".mode-choice").forEach((choice) => choice.setAttribute("aria-pressed", String(choice === button)));
+        state.history = [{ p: state.p, v: state.v }];
+        render();
+      }));
+      $("keep-traces").addEventListener("change", () => {
+        if (!$ ("keep-traces").checked) state.traces = [];
+        renderChart();
+      });
+      document.querySelectorAll(".molecule-choice").forEach((button) => button.addEventListener("click", () => {
+        state.molecule = button.dataset.molecule;
+        document.querySelectorAll(".molecule-choice").forEach((choice) => choice.setAttribute("aria-pressed", String(choice === button)));
+        render();
+      }));
+      $("reset-button").addEventListener("click", () => {
+        stopThermal();
+        $("keep-traces").checked = false;
+        state.p = 1.2; state.v = 5; state.t = 300; state.mode = "isothermal"; state.molecule = "mono";
+        state.traces = [];
+        state.start = { p: state.p, v: state.v, t: state.t };
+        state.history = [{ p: state.p, v: state.v }];
+        document.querySelectorAll(".mode-choice").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode)));
+        document.querySelectorAll(".molecule-choice").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.molecule === state.molecule)));
+        render();
+      });
+
+      window.addEventListener("resize", () => {
+        render();
+        previousPistonX = piston.offsetLeft;
+      });
+      state.history = [{ p: state.p, v: state.v }];
+      state.start = { p: state.p, v: state.v, t: state.t };
+      render();
+      requestAnimationFrame(animateParticles);
+    })();
+  </script>
+</body>
+</html>
