@@ -680,7 +680,7 @@
         if (button.dataset.mode === "adiabatic") stopThermal();
         if ($("keep-traces").checked && state.history.length > 1) {
           state.traces.push({ mode: state.mode, points: state.history.slice() });
-        } else {
+        } else if (!$("keep-traces").checked) {
           state.traces = [];
         }
         state.mode = button.dataset.mode;
